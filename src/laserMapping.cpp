@@ -53,6 +53,19 @@ void SigHandle(int sig)
   sig_buffer.notify_all();
 }
 
+PointCloudXYZI::Ptr loadPointcloudFromPcd(const std::string & file_path)
+{
+  auto pcd_ptr = std::make_shared<PointCloudXYZI>();
+
+  if (pcl::io::loadPCDFile(file_path, *pcd_ptr) == -1) {
+    RCLCPP_ERROR(LOGGER, "Couldn't read pcd file %s", file_path.c_str());
+    return nullptr;
+  }
+
+  RCLCPP_INFO(LOGGER, "Loaded %zu points from %s", pcd_ptr->size(), file_path.c_str());
+  return pcd_ptr;
+}
+
 inline void dump_lio_state_to_log(FILE * fp)
 {
   V3D rot_ang;
@@ -185,9 +198,9 @@ void publish_frame_world(
     pubLaserCloudFullRes->publish(laserCloudmsg);
   }
 
-  /**************** save map ****************/
-  /* 1. make sure you have enough memories
-    /* 2. noted that pcd save will influence the real-time performences **/
+  //--------------------------save map-----------------------------------
+  // 1. make sure you have enough memories
+  // 2. noted that pcd save will influence the real-time performances
   if (pcd_save_en) {
     int size = feats_down_world->points.size();
     PointCloudXYZI::Ptr laserCloudWorld(new PointCloudXYZI(size, 1));
@@ -203,7 +216,7 @@ void publish_frame_world(
 
     static int scan_wait_num = 0;
     scan_wait_num++;
-    if (pcl_wait_save->size() > 0 && pcd_save_interval > 0 && scan_wait_num >= pcd_save_interval) {
+    if (!pcl_wait_save->empty() && pcd_save_interval > 0 && scan_wait_num >= pcd_save_interval) {
       pcd_index++;
       string all_points_dir(
         string(string(ROOT_DIR) + "PCD/scans_") + to_string(pcd_index) + string(".pcd"));
@@ -236,24 +249,33 @@ void publish_frame_body(
 template <typename T>
 void set_posestamp(T & out)
 {
+  // Static variable, initialized to true, only effective on the first call
+  static bool is_first_kf = true;
+
+  auto set_output_from_kf = [&](const auto & kf) {
+    out.position.x = kf.x_.pos(0);
+    out.position.y = kf.x_.pos(1);
+    out.position.z = kf.x_.pos(2);
+    Eigen::Quaterniond q(kf.x_.rot);
+    out.orientation.x = q.coeffs()[0];
+    out.orientation.y = q.coeffs()[1];
+    out.orientation.z = q.coeffs()[2];
+    out.orientation.w = q.coeffs()[3];
+  };
+
   if (!use_imu_as_input) {
-    out.position.x = kf_output.x_.pos(0);
-    out.position.y = kf_output.x_.pos(1);
-    out.position.z = kf_output.x_.pos(2);
-    Eigen::Quaterniond q(kf_output.x_.rot);
-    out.orientation.x = q.coeffs()[0];
-    out.orientation.y = q.coeffs()[1];
-    out.orientation.z = q.coeffs()[2];
-    out.orientation.w = q.coeffs()[3];
+    if (enable_prior_pcd && is_first_kf) {
+      // Execute only on the first call
+      kf_output.x_.pos(0) = init_pose[0];
+      kf_output.x_.pos(1) = init_pose[1];
+      kf_output.x_.pos(2) = init_pose[2];
+      set_output_from_kf(kf_output);
+      is_first_kf = false;  // Set is_first_kf to false after the first call
+    } else {
+      set_output_from_kf(kf_output);
+    }
   } else {
-    out.position.x = kf_input.x_.pos(0);
-    out.position.y = kf_input.x_.pos(1);
-    out.position.z = kf_input.x_.pos(2);
-    Eigen::Quaterniond q(kf_input.x_.rot);
-    out.orientation.x = q.coeffs()[0];
-    out.orientation.y = q.coeffs()[1];
-    out.orientation.z = q.coeffs()[2];
-    out.orientation.w = q.coeffs()[3];
+    set_output_from_kf(kf_input);
   }
 }
 
@@ -375,15 +397,15 @@ int main(int argc, char ** argv)
   auto sub_imu =
     nh->create_subscription<sensor_msgs::msg::Imu>(imu_topic, rclcpp::SensorDataQoS(), imu_cbk);
   auto pub_laser_cloud_full_res =
-    nh->create_publisher<sensor_msgs::msg::PointCloud2>("cloud_registered", 1000);
+    nh->create_publisher<sensor_msgs::msg::PointCloud2>("cloud_registered", 20);
   auto pub_laser_cloud_full_res_body =
-    nh->create_publisher<sensor_msgs::msg::PointCloud2>("cloud_registered_body", 1000);
+    nh->create_publisher<sensor_msgs::msg::PointCloud2>("cloud_registered_body", 20);
   auto pub_laser_cloud_effect =
-    nh->create_publisher<sensor_msgs::msg::PointCloud2>("cloud_effected", 1000);
-  auto pub_laser_cloud_map = nh->create_publisher<sensor_msgs::msg::PointCloud2>("Laser_map", 1000);
+    nh->create_publisher<sensor_msgs::msg::PointCloud2>("cloud_effected", 20);
+  auto pub_laser_cloud_map = nh->create_publisher<sensor_msgs::msg::PointCloud2>("Laser_map", 20);
   auto pub_odom_aft_mapped =
-    nh->create_publisher<nav_msgs::msg::Odometry>("aft_mapped_to_init", 1000);
-  auto pub_path = nh->create_publisher<nav_msgs::msg::Path>("path", 1000);
+    nh->create_publisher<nav_msgs::msg::Odometry>("aft_mapped_to_init", 20);
+  auto pub_path = nh->create_publisher<nav_msgs::msg::Path>("path", 20);
   auto tf_broadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(nh);
 
   //------------------------------------------------------------------------------------------------------
@@ -509,17 +531,22 @@ int main(int argc, char ** argv)
             pointBodyToWorld(&(feats_undistort->points[i]), &(feats_down_world->points[i]));
           }
         }
-        for (size_t i = 0; i < feats_down_world->size(); i++) {
-          init_feats_world->points.emplace_back(feats_down_world->points[i]);
+        for (const auto & point : *feats_down_world) {
+          init_feats_world->points.emplace_back(point);
         }
-        if (init_feats_world->size() < init_map_size) {
-          init_map = false;
-        } else {
-          ivox_->AddPoints(init_feats_world->points);
-          publish_init_map(pub_laser_cloud_map);  //(pubLaserCloudFullRes);
 
+        if (init_feats_world->size() >= init_map_size) {
+          if (enable_prior_pcd) {
+            auto map_cloud = loadPointcloudFromPcd(prior_pcd_map_path);
+            ivox_->AddPoints(map_cloud->points);
+          } else {
+            ivox_->AddPoints(init_feats_world->points);
+          }
+          publish_init_map(pub_laser_cloud_map);
           init_feats_world.reset(new PointCloudXYZI());
           init_map = true;
+        } else {
+          init_map = false;
         }
         continue;
       }
@@ -564,7 +591,7 @@ int main(int argc, char ** argv)
         bool imu_upda_cov = false;
         effct_feat_num = 0;
         /**** point by point update ****/
-        if (time_seq.size() > 0) {
+        if (!time_seq.empty()) {
           double pcl_beg_time = Measures.lidar_beg_time;
           idx = -1;
           for (k = 0; k < time_seq.size(); k++) {
@@ -769,7 +796,7 @@ int main(int argc, char ** argv)
       } else {
         bool imu_prop_cov = false;
         effct_feat_num = 0;
-        if (time_seq.size() > 0) {
+        if (!time_seq.empty()) {
           double pcl_beg_time = Measures.lidar_beg_time;
           idx = -1;
           for (k = 0; k < time_seq.size(); k++) {
@@ -1013,9 +1040,9 @@ int main(int argc, char ** argv)
     rate.sleep();
   }
   //--------------------------save map-----------------------------------
-  /* 1. make sure you have enough memories
-    /* 2. noted that pcd save will influence the real-time performences **/
-  if (pcl_wait_save->size() > 0 && pcd_save_en) {
+  // 1. make sure you have enough memories
+  // 2. noted that pcd save will influence the real-time performances
+  if (!pcl_wait_save->empty() && pcd_save_en) {
     string file_name = string("scans.pcd");
     string all_points_dir(string(string(ROOT_DIR) + "PCD/") + file_name);
     pcl::PCDWriter pcd_writer;

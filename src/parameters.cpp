@@ -36,6 +36,10 @@ shared_ptr<ImuProcess> p_imu;
 double time_update_last = 0.0, time_current = 0.0, time_predict_last_const = 0.0, t_last = 0.0;
 double time_diff_lidar_to_imu = 0.0;
 
+bool enable_prior_pcd;
+string prior_pcd_map_path;
+std::vector<double> init_pose;
+
 double lidar_time_inte = 0.1, first_imu_time = 0.0;
 int cut_frame_num = 1, orig_odom_freq = 10;
 double online_refine_time = 20.0;  //unit: s
@@ -100,6 +104,15 @@ void readParameters(std::shared_ptr<rclcpp::Node> & nh)
 
     nh->declare_parameter<double>("common.time_diff_lidar_to_imu", 0.0);
     nh->get_parameter("common.time_diff_lidar_to_imu", time_diff_lidar_to_imu);
+
+    nh->declare_parameter<bool>("prior_pcd.enable", false);
+    nh->get_parameter("prior_pcd.enable", enable_prior_pcd);
+
+    nh->declare_parameter<string>("prior_pcd.prior_pcd_map_path", "");
+    nh->get_parameter("prior_pcd.prior_pcd_map_path", prior_pcd_map_path);
+
+    nh->declare_parameter<std::vector<double>>("prior_pcd.init_pose", std::vector<double>());
+    nh->get_parameter("prior_pcd.init_pose", init_pose);
 
     nh->declare_parameter<double>("filter_size_surf", 0.5);
     nh->get_parameter("filter_size_surf", filter_size_surf_min);

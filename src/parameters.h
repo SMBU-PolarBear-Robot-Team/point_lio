@@ -75,6 +75,10 @@ extern double online_refine_time;  //unit: s
 extern bool cut_frame_init;
 extern double time_update_last, time_current, time_predict_last_const, t_last;
 
+extern bool enable_prior_pcd;
+extern string prior_pcd_map_path;
+extern std::vector<double> init_pose;
+
 extern MeasureGroup Measures;
 
 extern ofstream fout_out, fout_imu_pbp;

@@ -20,6 +20,11 @@
             cut_frame_time_interval: 0.1                    # should be integral fraction of 1 / LiDAR frequency
             time_diff_lidar_to_imu: 0.0                     # Time offset between LiDAR and IMU calibrated by other algorithms, e.g., LI-Init (find in Readme)
 
+        prior_pcd:
+            enable: False
+            prior_pcd_map_path: ""
+            init_pose: [ 0.0, 0.0, 0.0 ]
+
         preprocess:
             lidar_type: 2
             scan_line: 32

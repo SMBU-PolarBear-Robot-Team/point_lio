@@ -4,6 +4,10 @@
 
 ## Point-LIO: Robust High-Bandwidth Lidar-Inertial Odometry
 
+## Branch: RM25_SMBU_auto_sentry
+
+- Feats: Prior pcd map input
+
 ## 1. Introduction
 
 <div align="center">
@@ -46,17 +50,20 @@ The codes of this repo are contributed by:
 
 ## **1.2. Related paper**
 
+
 Our paper is published on Advanced Intelligent Systems(AIS). [Point-LIO](https://onlinelibrary.wiley.com/doi/epdf/10.1002/aisy.202200459), DOI: 10.1002/aisy.202200459
 
 ## **1.3. Related video**
 
 Our accompany video is available on **YouTube**.
 
+
 <div align="center">
     <a href="https://youtu.be/oS83xUs42Uw" target="_blank"><img src="https://github.com/hku-mars/Point-LIO/raw/master/image/final.png" width=60% /></a>
 </div>
 
 ## 2. What can Point-LIO do?
+
 
 ### 2.1 Simultaneous LiDAR localization and mapping (SLAM) without motion distortion
 
@@ -68,7 +75,7 @@ Our accompany video is available on **YouTube**.
 
 ### **3.1 Ubuntu and [ROS2](https://www.ros.org/)**
 
-**Ubuntu >= 20.04**
+Ubuntu >= 20.04
 
 The default from apt PCL and Eigen is enough for FAST-LIO to work normally.
 
@@ -80,7 +87,11 @@ sudo apt-get install ros-$ROS_DISTRO-pcl-conversions
 
 ### **3.2 Eigen**
 
+### **3.2 Eigen**
+
 Following the official [Eigen installation](eigen.tuxfamily.org/index.php?title=Main_Page), or directly install Eigen by:
+
+```sh
 
 ```sh
 sudo apt-get install libeigen3-dev
@@ -97,8 +108,10 @@ Follow [livox_ros_driver Installation](https://github.com/Livox-SDK/livox_ros_dr
 
 ## 4. Build
 
+
 Clone the repository and catkin_make:
 
+```sh
 ```sh
     cd ~/$A_ROS_DIR$/src
     git clone https://github.com/LihanChen2004/Point-LIO.git
