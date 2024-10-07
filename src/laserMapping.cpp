@@ -44,6 +44,8 @@ nav_msgs::msg::Path path;
 nav_msgs::msg::Odometry odomAftMapped;
 geometry_msgs::msg::PoseStamped msg_body_pose;
 
+int sleep_time = 0;
+
 auto LOGGER = rclcpp::get_logger("laserMapping");
 
 void SigHandle(int sig)
@@ -985,11 +987,16 @@ int main(int argc, char ** argv)
 
       /*** add the feature points to map ***/
       t3 = omp_get_wtime();
-
       if (feats_down_size > 4) {
-        MapIncremental();
+        if (enable_prior_pcd) {
+          sleep_time++;
+          if (sleep_time > 200) {
+            MapIncremental();
+          }
+        } else {
+          MapIncremental();
+        }
       }
-
       t5 = omp_get_wtime();
       /******* Publish points *******/
       if (path_en) publish_path(pub_path);
