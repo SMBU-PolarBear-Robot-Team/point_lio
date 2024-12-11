@@ -183,50 +183,31 @@ void publish_frame_world(
   const rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr & pubLaserCloudFullRes)
 {
   if (scan_pub_en) {
-    PointCloudXYZI::Ptr laserCloudFullRes(dense_pub_en ? feats_undistort : feats_down_body);
-    int size = laserCloudFullRes->points.size();
-
-    PointCloudXYZI::Ptr laserCloudWorld(new PointCloudXYZI(size, 1));
-
-    for (int i = 0; i < size; i++) {
-      pointBodyToWorld(&laserCloudFullRes->points[i], &laserCloudWorld->points[i]);
-    }
-
     sensor_msgs::msg::PointCloud2 laserCloudmsg;
-    pcl::toROSMsg(*laserCloudWorld, laserCloudmsg);
+    pcl::toROSMsg(*feats_down_world, laserCloudmsg);
 
     laserCloudmsg.header.stamp = get_ros_time(lidar_end_time);
     laserCloudmsg.header.frame_id = "camera_init";
     pubLaserCloudFullRes->publish(laserCloudmsg);
-  }
 
-  //--------------------------save map-----------------------------------
-  // 1. make sure you have enough memories
-  // 2. noted that pcd save will influence the real-time performances
-  if (pcd_save_en) {
-    int size = feats_down_world->points.size();
-    PointCloudXYZI::Ptr laserCloudWorld(new PointCloudXYZI(size, 1));
+    //--------------------------save map-----------------------------------
+    // 1. make sure you have enough memories
+    // 2. noted that pcd save will influence the real-time performances
+    if (pcd_save_en) {
+      *pcl_wait_save += *feats_down_world;
 
-    for (int i = 0; i < size; i++) {
-      laserCloudWorld->points[i].x = feats_down_world->points[i].x;
-      laserCloudWorld->points[i].y = feats_down_world->points[i].y;
-      laserCloudWorld->points[i].z = feats_down_world->points[i].z;
-      laserCloudWorld->points[i].intensity = feats_down_world->points[i].intensity;
-    }
-
-    *pcl_wait_save += *laserCloudWorld;
-
-    static int scan_wait_num = 0;
-    scan_wait_num++;
-    if (!pcl_wait_save->empty() && pcd_save_interval > 0 && scan_wait_num >= pcd_save_interval) {
-      pcd_index++;
-      string all_points_dir(
-        string(string(ROOT_DIR) + "PCD/scans_") + to_string(pcd_index) + string(".pcd"));
-      pcl::PCDWriter pcd_writer;
-      std::cout << "current scan saved to /PCD/" << all_points_dir << '\n';
-      pcd_writer.writeBinary(all_points_dir, *pcl_wait_save);
-      pcl_wait_save->clear();
-      scan_wait_num = 0;
+      static int scan_wait_num = 0;
+      scan_wait_num++;
+      if (!pcl_wait_save->empty() && pcd_save_interval > 0 && scan_wait_num >= pcd_save_interval) {
+        pcd_index++;
+        string all_points_dir(
+          string(string(ROOT_DIR) + "PCD/scans_") + to_string(pcd_index) + string(".pcd"));
+        pcl::PCDWriter pcd_writer;
+        std::cout << "current scan saved to /PCD/" << all_points_dir << '\n';
+        pcd_writer.writeBinary(all_points_dir, *pcl_wait_save);
+        pcl_wait_save->clear();
+        scan_wait_num = 0;
+      }
     }
   }
 }
